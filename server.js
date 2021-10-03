@@ -51,7 +51,7 @@ app.get('/list', function(req, res){
         res.send({data});
     });
 });
-
+//
 app.get('*',function(req, res){
     res.sendFile(path.join(__dirname, 'beomsutagram/build/index.html'));
 });
