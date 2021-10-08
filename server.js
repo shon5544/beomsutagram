@@ -1,20 +1,48 @@
 const express = require('express');
+const cors = require('cors');
 const path = require('path');
 const app = express();
 const methodOverride = require('method-override');
-app.use(methodOverride('_method'));
-app.use(express.urlencoded({extended : true}));
-app.use(express.json());
-app.use(express.static(path.join(__dirname, 'beomsutagram/build')));
 
-let db;
 const passport = require('passport');
 const localStrategy = require('passport-local').Strategy;
 const session = require('express-session');
 
-app.use(session({secret: 'secret-code', resave: true, saveUninitialized: false}));
+app.use(session({
+    secret: 'secret-code',
+    resave: true,
+    saveUninitialized: false
+}));
 app.use(passport.initialize());
 app.use(passport.session());
+
+app.use(cors());
+app.use(express.static(path.join(__dirname, 'beomsutagram/build')));
+app.use(methodOverride('_method'));
+app.use(express.urlencoded({extended : true}));
+app.use(express.json());
+
+let db;
+let multer = require('multer');
+var storage = multer.diskStorage({
+    destination: function(req, file, cb){
+        cb(null, './public/image');
+    },
+    filename: function(req, file, cb){
+        cb(null, file.originalname);
+    },
+    // filefilter: function(req, file, cb){
+    //     var ext = path.extname(file.originalname);
+    //     if(ext !== '.png' && ext !== '.jpg' && ext !== '.jpeg'){
+    //         return cb(new Error('PNG, JPG만 업로드하세요!'));
+    //     }
+    //     cb(null, true);
+    // }
+})
+
+var upload = multer({storage: storage});
+
+
 
 const MongoClient = require('mongodb').MongoClient;
 MongoClient.connect('mongodb+srv://bs3206:sbs32463206@cluster0.84vzi.mongodb.net/myFirstDatabase?retryWrites=true&w=majority', function(err, client){
@@ -23,21 +51,21 @@ MongoClient.connect('mongodb+srv://bs3206:sbs32463206@cluster0.84vzi.mongodb.net
     }
 
     db = client.db('beomsutagram');
-    app.listen(3000, ()=>{
-        console.log('3000으로 접속완료');
+    app.listen(8080, ()=>{
+        console.log('8080으로 접속완료');
     });
 })
 
-function isLogined(req, res, next){
-    if(req.user){
-        next();
-    } else {
-        res.redirect('/login');
-    }
-}
+// function isLogined(req, res, next){
+//     if(req.user){
+//         next();
+//     } else {
+//         res.redirect('http://localhost:3000/login');
+//     }
+// }
 
-app.get('/write', isLogined, (req,res)=>{
-    res.sendFile(path.join(__dirname, 'beomsutagram/build/index.html'));
+app.get('/write', (req,res)=>{
+    //res.sendFile(path.join(__dirname, 'beomsutagram/build/index.html'));
 });
 
 app.get('/list', function(req, res){
@@ -51,13 +79,14 @@ app.get('/list', function(req, res){
         res.send({data});
     });
 });
-//
-app.get('*',function(req, res){
-    res.sendFile(path.join(__dirname, 'beomsutagram/build/index.html'));
-});
 
-app.get('/isLogined', isLogined, function(req, res){
-    res.send({state: true});
+app.get('/isLogined',function(req, res){
+    console.log(req);
+    if(req.user === undefined || !req.user){
+        res.send({state: false});
+    } else {
+        res.send({state: true});
+    }
 });
 
 app.post('/register', function(req, res){
@@ -68,10 +97,18 @@ app.post('/register', function(req, res){
     }
     db.collection('user').findOne({id: userData.id}, function(err, result){
         if(result == null){
-            db.collection('user').insertOne(userData, function(err, result){
+            db.collection('user').findOne({nickname: userData.nickname}, function(err, result){
                 if(err) console.log(err);
-                console.log('잘 전송됐습니다');
-                res.redirect('/');
+
+                if(!result){
+                    db.collection('user').insertOne(userData, function(err, result){
+                        if(err) console.log(err);
+                        console.log('잘 전송됐습니다');
+                        res.redirect('http://localhost:3000/login');
+                    });
+                } else {
+                    console.log('이미 있는 닉네임입니다.');
+                }
             });
         } else {
             console.log('이미 있는 아이디입니다.');
@@ -80,16 +117,16 @@ app.post('/register', function(req, res){
 });
 
 app.post('/login', passport.authenticate('local', {
-    failureRedirect: '/fail'
+    failureRedirect: 'http://localhost:3000/fail'
 }), (req, res)=>{
-    res.redirect('/');
+    res.redirect('http://localhost:3000/');
 });
 
-app.get('/mypage', isLogined, (req, res)=>{
+app.get('/mypage', (req, res)=>{
     console.log(req.user);
 });
 
-app.post('/peed', isLogined, (req, res)=>{
+app.post('/peed', upload.array('imgFile', 5), (req, res)=>{
     const date = new Date();
     const year = date.getFullYear();
     const month = date.getMonth();
@@ -109,7 +146,7 @@ app.post('/peed', isLogined, (req, res)=>{
     db.collection('peed').insertOne(peedData, (err, result)=>{
         if(err) console.log(err);
     });
-    res.redirect('/');
+    res.redirect('http://localhost:3000/');
 })
 
 passport.use(new localStrategy({
